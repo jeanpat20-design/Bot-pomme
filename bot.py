@@ -1,9 +1,10 @@
+import json
 import logging
 import os
 
 from telegram import InlineKeyboardButton as B
 from telegram import InlineKeyboardMarkup as M
-from telegram import Update
+from telegram import KeyboardButton, ReplyKeyboardMarkup, Update, WebAppInfo
 from telegram.ext import (
     Application,
     CallbackQueryHandler,
@@ -17,11 +18,12 @@ logging.basicConfig(level=logging.INFO)
 
 # --- Variables d'environnement (à définir sur l'hébergeur) ---
 TOKEN = os.environ["TOKEN"]  # token donné par @BotFather
-BASE_URL = os.environ["BASE_URL"].rstrip("/")  # URL publique du service
+BASE_URL = os.environ["BASE_URL"].rstrip("/")  # URL publique du bot
 ADMIN_ID = os.environ.get("ADMIN_ID")  # ton ID Telegram (via @userinfobot)
+WEBAPP_URL = os.environ.get("WEBAPP_URL")  # URL du site statique (Mini App)
 PORT = int(os.environ.get("PORT", 8000))
 
-# --- Catalogue : 5 pays, modifie à ta guise (prix en € par kg) ---
+# --- Catalogue : 5 pays (prix en € par kg). Garde-le identique à webapp/index.html ---
 CATALOGUE = {
     "🇫🇷 France": {"Pink Lady": 3.5, "Reine des Reinettes": 3.2, "Gala": 2.8},
     "🇯🇵 Japon": {"Fuji": 6.0, "Sekai-ichi": 9.5},
@@ -41,9 +43,16 @@ async def show(update: Update, text: str, kb: M) -> None:
 
 
 async def menu(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
+    # Bouton permanent qui ouvre la Mini App (nécessaire pour qu'elle renvoie la commande)
+    if WEBAPP_URL and update.message:
+        clavier = ReplyKeyboardMarkup(
+            [[KeyboardButton("🍎 Ouvrir la boutique", web_app=WebAppInfo(WEBAPP_URL))]],
+            resize_keyboard=True,
+        )
+        await update.message.reply_text("Touche le bouton en bas pour ouvrir la boutique 👇", reply_markup=clavier)
     rows = [[B(p, callback_data=f"c:{i}")] for i, p in enumerate(PAYS)]
     rows.append([B("🛒 Mon panier", callback_data="cart")])
-    await show(update, "🍎 Bienvenue ! Choisis un pays :", M(rows))
+    await show(update, "🍎 Ou choisis un pays ici :", M(rows))
 
 
 async def pays(update: Update, ctx: ContextTypes.DEFAULT_TYPE, ci: int) -> None:
@@ -113,6 +122,33 @@ async def boutons(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
         await q.message.reply_text("📦 Envoie-moi ton nom et ton adresse de livraison :")
 
 
+async def webapp_data(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
+    """Reçoit le panier envoyé par la Mini App."""
+    msg = update.effective_message
+    try:
+        items = json.loads(msg.web_app_data.data)
+    except ValueError:
+        return
+    cart = {}
+    for key, qte in items.items():
+        nom_pays, _, pomme = key.partition("|")
+        if nom_pays in CATALOGUE and pomme in CATALOGUE[nom_pays]:
+            if isinstance(qte, int) and 0 < qte <= 50:
+                ci = PAYS.index(nom_pays)
+                ai = list(CATALOGUE[nom_pays]).index(pomme)
+                cart[f"{ci}:{ai}"] = qte  # les prix viennent du bot, pas de la Mini App
+    if not cart:
+        await msg.reply_text("Ton panier est vide.")
+        return
+    ctx.user_data["cart"] = cart
+    ctx.user_data["await_addr"] = True
+    lignes, total = lignes_panier(cart)
+    await msg.reply_text(
+        "🛒 Ta commande :\n" + "\n".join(lignes) + f"\n\nTotal : {total:.2f} €"
+        "\n\n📦 Envoie-moi ton nom et ton adresse de livraison :"
+    )
+
+
 async def texte(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
     if not ctx.user_data.get("await_addr"):
         await update.message.reply_text("Tape /start pour voir la boutique 🍎")
@@ -138,6 +174,7 @@ def main() -> None:
     app.add_handler(CommandHandler("start", menu))
     app.add_handler(CommandHandler("panier", panier))
     app.add_handler(CallbackQueryHandler(boutons))
+    app.add_handler(MessageHandler(filters.StatusUpdate.WEB_APP_DATA, webapp_data))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, texte))
     app.run_webhook(
         listen="0.0.0.0",
