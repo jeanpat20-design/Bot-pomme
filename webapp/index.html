@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="fr"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<title>Pommes du monde</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<style>
+body{margin:0;font-family:-apple-system,system-ui,sans-serif;background:var(--tg-theme-bg-color,#fff);color:var(--tg-theme-text-color,#111);padding-bottom:90px}
+h1{font-size:20px;margin:14px 14px 8px}
+#tabs{display:flex;gap:8px;overflow-x:auto;padding:0 14px 10px}
+.tab{flex:none;padding:8px 12px;border-radius:18px;border:0;background:var(--tg-theme-secondary-bg-color,#eee);color:inherit;font-size:14px}
+.tab.on{background:var(--tg-theme-button-color,#2481cc);color:var(--tg-theme-button-text-color,#fff)}
+#grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:0 14px}
+.card{background:var(--tg-theme-secondary-bg-color,#f3f3f3);border-radius:14px;overflow:hidden}
+.card img{width:100%;aspect-ratio:1;object-fit:cover;display:block}
+.info{padding:8px 10px}
+.name{font-weight:600;font-size:15px}
+.price{font-size:13px;opacity:.7;margin:2px 0 8px}
+.qty{display:flex;align-items:center;justify-content:space-between}
+.qty button{width:36px;height:36px;border-radius:50%;border:0;font-size:20px;background:var(--tg-theme-button-color,#2481cc);color:var(--tg-theme-button-text-color,#fff)}
+</style></head><body>
+<h1>🍎 Pommes du monde</h1>
+<div id="tabs"></div>
+<div id="grid"></div>
+<script>
+const tg = Telegram.WebApp; tg.ready(); tg.expand();
+
+// Même catalogue que dans bot.py : [nom, prix €/kg, couleur, photo]
+const C = {
+  "🇫🇷 France": [["Pink Lady",3.5,"#e8505b","pink-lady.jpg"],["Reine des Reinettes",3.2,"#c9a227","reine-des-reinettes.jpg"],["Gala",2.8,"#d9534f","gala.jpg"]],
+  "🇯🇵 Japon": [["Fuji",6.0,"#e5707e","fuji.jpg"],["Sekai-ichi",9.5,"#d94452","sekai-ichi.jpg"]],
+  "🇳🇿 Nouvelle-Zélande": [["Jazz",4.5,"#d8453a","jazz.jpg"],["Braeburn",4.0,"#b5412f","braeburn.jpg"]],
+  "🇺🇸 États-Unis": [["Honeycrisp",5.0,"#e2674a","honeycrisp.jpg"],["Red Delicious",3.0,"#a3141f","red-delicious.jpg"]],
+  "🇮🇹 Italie": [["Golden Delicious",3.0,"#e3c83a","golden-delicious.jpg"],["Annurca",4.2,"#c0392b","annurca.jpg"]]
+};
+const cart = {}; let cur = Object.keys(C)[0];
+const $ = id => document.getElementById(id);
+
+// Dessin de pomme affiché tant que la vraie photo n'est pas ajoutée
+const svg = c => "data:image/svg+xml," + encodeURIComponent(
+  `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' fill='#f6f1e7'/><path d='M50 30c-10-8-30-4-30 20 0 20 14 36 30 30 16 6 30-10 30-30 0-24-20-28-30-20z' fill='${c}'/><path d='M50 30c0-8 3-14 9-18' stroke='#6b4a2b' stroke-width='4' fill='none' stroke-linecap='round'/><path d='M56 22c8-6 16-2 16-2s-4 10-14 8z' fill='#5aa13c'/></svg>`);
+
+function draw() {
+  $("tabs").innerHTML = Object.keys(C).map(p =>
+    `<button class="tab ${p == cur ? "on" : ""}" onclick="cur='${p}';draw()">${p}</button>`).join("");
+  $("grid").innerHTML = C[cur].map(([n, pr, col, img]) => {
+    const k = cur + "|" + n;
+    return `<div class="card"><img src="${img}" onerror="this.onerror=null;this.src=svg('${col}')">
+      <div class="info"><div class="name">${n}</div><div class="price">${pr.toFixed(2)} €/kg</div>
+      <div class="qty"><button onclick="chg('${k}',-1)">−</button><b>${cart[k] || 0} kg</b><button onclick="chg('${k}',1)">+</button></div></div></div>`;
+  }).join("");
+}
+
+function chg(k, d) {
+  cart[k] = Math.max(0, Math.min(50, (cart[k] || 0) + d));
+  if (!cart[k]) delete cart[k];
+  draw(); upd();
+}
+
+function upd() {
+  let t = 0;
+  for (const k in cart) { const [p, n] = k.split("|"); t += cart[k] * C[p].find(a => a[0] == n)[1]; }
+  if (t > 0) { tg.MainButton.setText(`Commander — ${t.toFixed(2)} €`); tg.MainButton.show(); }
+  else tg.MainButton.hide();
+}
+
+tg.MainButton.onClick(() => tg.sendData(JSON.stringify(cart)));
+draw();
+</script></body></html>
