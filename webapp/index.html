@@ -5,13 +5,15 @@
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
 <style>
 body{margin:0;font-family:-apple-system,system-ui,sans-serif;background:var(--tg-theme-bg-color,#fff);color:var(--tg-theme-text-color,#111);padding-bottom:90px}
-h1{font-size:20px;margin:14px 14px 8px}
+h1{font-size:20px;margin:14px 14px 4px}
+.sub{margin:0 14px 10px;font-size:13px;opacity:.7}
 #tabs{display:flex;gap:8px;overflow-x:auto;padding:0 14px 10px}
-.tab{flex:none;padding:8px 12px;border-radius:18px;border:0;background:var(--tg-theme-secondary-bg-color,#eee);color:inherit;font-size:14px}
+.tab{flex:none;padding:7px 12px;border-radius:18px;border:0;background:var(--tg-theme-secondary-bg-color,#eee);color:inherit;font-size:14px}
 .tab.on{background:var(--tg-theme-button-color,#2481cc);color:var(--tg-theme-button-text-color,#fff)}
 #grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:0 14px}
-.card{background:var(--tg-theme-secondary-bg-color,#f3f3f3);border-radius:14px;overflow:hidden}
+.card{position:relative;background:var(--tg-theme-secondary-bg-color,#f3f3f3);border-radius:14px;overflow:hidden}
 .card img{width:100%;aspect-ratio:1;object-fit:cover;display:block}
+.flag{position:absolute;top:8px;left:8px;background:rgba(255,255,255,.9);border-radius:10px;padding:2px 7px;font-size:16px}
 .info{padding:8px 10px}
 .name{font-weight:600;font-size:15px}
 .price{font-size:13px;opacity:.7;margin:2px 0 8px}
@@ -19,6 +21,7 @@ h1{font-size:20px;margin:14px 14px 8px}
 .qty button{width:36px;height:36px;border-radius:50%;border:0;font-size:20px;background:var(--tg-theme-button-color,#2481cc);color:var(--tg-theme-button-text-color,#fff)}
 </style></head><body>
 <h1>🍎 Pommes du monde</h1>
+<div class="sub">Touche + pour ajouter des kilos à ton panier</div>
 <div id="tabs"></div>
 <div id="grid"></div>
 <script>
@@ -32,7 +35,9 @@ const C = {
   "🇺🇸 États-Unis": [["Honeycrisp",5.0,"#e2674a","honeycrisp.jpg"],["Red Delicious",3.0,"#a3141f","red-delicious.jpg"]],
   "🇮🇹 Italie": [["Golden Delicious",3.0,"#e3c83a","golden-delicious.jpg"],["Annurca",4.2,"#c0392b","annurca.jpg"]]
 };
-const cart = {}; let cur = Object.keys(C)[0];
+// Liste à plat : [pays, nom, prix, couleur, photo]
+const ALL = Object.entries(C).flatMap(([p, l]) => l.map(a => [p, ...a]));
+const cart = {}; let cur = "Tous";
 const $ = id => document.getElementById(id);
 
 // Dessin de pomme affiché tant que la vraie photo n'est pas ajoutée
@@ -40,11 +45,12 @@ const svg = c => "data:image/svg+xml," + encodeURIComponent(
   `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' fill='#f6f1e7'/><path d='M50 30c-10-8-30-4-30 20 0 20 14 36 30 30 16 6 30-10 30-30 0-24-20-28-30-20z' fill='${c}'/><path d='M50 30c0-8 3-14 9-18' stroke='#6b4a2b' stroke-width='4' fill='none' stroke-linecap='round'/><path d='M56 22c8-6 16-2 16-2s-4 10-14 8z' fill='#5aa13c'/></svg>`);
 
 function draw() {
-  $("tabs").innerHTML = Object.keys(C).map(p =>
+  $("tabs").innerHTML = ["Tous", ...Object.keys(C)].map(p =>
     `<button class="tab ${p == cur ? "on" : ""}" onclick="cur='${p}';draw()">${p}</button>`).join("");
-  $("grid").innerHTML = C[cur].map(([n, pr, col, img]) => {
-    const k = cur + "|" + n;
-    return `<div class="card"><img src="${img}" onerror="this.onerror=null;this.src=svg('${col}')">
+  const list = cur == "Tous" ? ALL : ALL.filter(a => a[0] == cur);
+  $("grid").innerHTML = list.map(([p, n, pr, col, img]) => {
+    const k = p + "|" + n;
+    return `<div class="card"><img src="${img}" onerror="this.onerror=null;this.src=svg('${col}')"><span class="flag">${p.split(" ")[0]}</span>
       <div class="info"><div class="name">${n}</div><div class="price">${pr.toFixed(2)} €/kg</div>
       <div class="qty"><button onclick="chg('${k}',-1)">−</button><b>${cart[k] || 0} kg</b><button onclick="chg('${k}',1)">+</button></div></div></div>`;
   }).join("");
@@ -58,7 +64,7 @@ function chg(k, d) {
 
 function upd() {
   let t = 0;
-  for (const k in cart) { const [p, n] = k.split("|"); t += cart[k] * C[p].find(a => a[0] == n)[1]; }
+  for (const k in cart) { const [p, n] = k.split("|"); t += cart[k] * ALL.find(a => a[0] == p && a[1] == n)[2]; }
   if (t > 0) { tg.MainButton.setText(`Commander — ${t.toFixed(2)} €`); tg.MainButton.show(); }
   else tg.MainButton.hide();
 }
